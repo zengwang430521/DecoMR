@@ -54,11 +54,19 @@ class SMPL(nn.Module):
         self.register_buffer('J_regressor_extra', J_regressor_extra)
         self.joints_idx = cfg.JOINTS_IDX
 
-        self.register_buffer('lsp_regressor', torch.FloatTensor(np.load(cfg.LSP_REGRESSOR_EVAL)).permute(1, 0))
+        # This is the h36m regressor used in Graph-CMR(https://github.com/nkolot/GraphCMR)
+        self.register_buffer('h36m_regressor_cmr', torch.FloatTensor(np.load(cfg.JOINT_REGRESSOR_H36M)))
+        self.register_buffer('lsp_regressor_cmr', torch.FloatTensor(np.load(cfg.JOINT_REGRESSOR_H36M))[cfg.H36M_TO_J14])
+
+        # This is another lsp joints regressor, we use it for training and evaluation
+        self.register_buffer('lsp_regressor_eval', torch.FloatTensor(np.load(cfg.LSP_REGRESSOR_EVAL)).permute(1, 0))
+
+        # We hope the training and evaluation regressor for the lsp joints to be consistent,
+        # so we replace parts of the training regressor used in Graph-CMR.
         train_regressor = torch.cat([self.J_regressor, self.J_regressor_extra], dim=0)
         train_regressor = train_regressor[[cfg.JOINTS_IDX]].clone()
         idx = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 18]
-        train_regressor[idx] = self.lsp_regressor
+        train_regressor[idx] = self.lsp_regressor_eval
         self.register_buffer('train_regressor', train_regressor)
 
     def forward(self, pose, beta):
@@ -110,6 +118,7 @@ class SMPL(nn.Module):
         v = torch.matmul(T, rest_shape_h[:, :, :, None])[:, :, :3, 0]
         return v
 
+    # The function used in Graph-CMR, outputting the 24 training joints.
     def get_joints(self, vertices):
         """
         This method is used to get the joint locations from the SMPL mesh
@@ -124,6 +133,7 @@ class SMPL(nn.Module):
         joints = joints[:, cfg.JOINTS_IDX]
         return joints
 
+    # The function used in Graph-CMR, get 38 joints.
     def get_full_joints(self, vertices):
         """
         This method is used to get the joint locations from the SMPL mesh
@@ -137,6 +147,12 @@ class SMPL(nn.Module):
         joints = torch.cat((joints, joints_extra), dim=1)
         return joints
 
+    # Get 14 lsp joints use the joint regressor provided by CMR.
+    def get_lsp_joints(self, vertices):
+        joints = torch.matmul(self.lsp_regressor_cmr[None, :], vertices)
+        return joints
+
+    # Get the joints defined by SMPL model.
     def get_smpl_joints(self, vertices):
         """
         This method is used to get the SMPL model joint locations from the SMPL mesh
@@ -148,6 +164,7 @@ class SMPL(nn.Module):
         joints = torch.einsum('bik,ji->bjk', [vertices, self.J_regressor])
         return joints.contiguous()
 
+    # Get 24 training joints using the evaluation LSP joint regressor.
     def get_train_joints(self, vertices):
         """
         This method is used to get the training 24 joint locations from the SMPL mesh
@@ -159,6 +176,7 @@ class SMPL(nn.Module):
         joints = torch.matmul(self.train_regressor[None, :], vertices)
         return joints
 
+    # Get 14 lsp joints for the evaluation.
     def get_eval_joints(self, vertices):
         """
         This method is used to get the 14 eval joint locations from the SMPL mesh
@@ -167,7 +185,7 @@ class SMPL(nn.Module):
         Output:
             3D joints: size = (B, 14, 3)
         """
-        joints = torch.matmul(self.lsp_regressor[None, :], vertices)
+        joints = torch.matmul(self.lsp_regressor_eval[None, :], vertices)
         return joints
 
 
