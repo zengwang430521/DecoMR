@@ -1,7 +1,3 @@
-'''
-Codes are adapted from https://github.com/nkolot/GraphCMR
-'''
-
 from __future__ import division
 
 import torch
@@ -16,39 +12,32 @@ from utils.imutils import crop, flip_img, flip_pose, flip_kp, transform, rot_aa
 import os
 
 
-class BaseDataset(Dataset):
-    """
-    Base Dataset Class - Handles data loading and augmentation.
-    Able to handle heterogeneous datasets (different annotations available for different datasets).
-    You need to update the path to each dataset in utils/config.py.
-    """
-    def __init__(self, options, dataset, use_augmentation=True, is_train=True, use_IUV=False):
-        super(BaseDataset, self).__init__()
-        self.dataset = dataset
+def flip_smpl_kp(kp):
+    """Flip SMPL 24 keypoints."""
+    flipped_parts = [0,2,1,3,5,4,6,8,7,9,11,10,12,14,13,15,17,16,19,18,21,20,23,22]
+    kp = kp[flipped_parts]
+    kp[:,0] = - kp[:,0]
+    return kp
+
+
+class SurrealDataset(Dataset):
+    def __init__(self, options, use_augmentation=True, is_train=True, use_IUV=False):
+        super(SurrealDataset, self).__init__()
+        dataset= 'surreal'
+
         self.is_train = is_train
         self.options = options
-        self.img_dir = cfg.DATASET_FOLDERS[dataset]
+        root_dir = cfg.DATASET_FOLDERS[dataset]
+        if self.is_train:
+            self.video_dir = join(root_dir, 'data/cmu/train')
+        else:
+            self.video_dir = join(root_dir, 'data/cmu/val')
+
         self.normalize_img = Normalize(mean=cfg.IMG_NORM_MEAN, std=cfg.IMG_NORM_STD)
         self.data = np.load(cfg.DATASET_FILES[is_train][dataset])
-        self.imgname = self.data['imgname']
 
-        # Get paths to gt masks, if available
-        try:
-            self.maskname = self.data['maskname']
-        except KeyError:
-            pass
-        try:
-            self.partname = self.data['partname']
-        except KeyError:
-            pass
-
-        # Get gender data, if available
-        try:
-            gender = self.data['gender']
-            self.gender = np.array([0 if str(g) == 'm' else 1 for g in gender]).astype(np.int32)
-        except KeyError:
-            self.gender = -1*np.ones(len(self.imgname)).astype(np.int32)
-
+        self.videoname = self.data['videoname']
+        self.framenum = self.data['framenum']
         # Bounding boxes are assumed to be in the center and scale format
         self.scale = self.data['scale']
         self.center = self.data['center']
@@ -56,55 +45,44 @@ class BaseDataset(Dataset):
         # If False, do not do augmentation
         self.use_augmentation = use_augmentation
 
+        # Get gender data, if available
+        try:
+            gender = self.data['gender']
+            self.gender = np.array([0 if str(g) == 'm' else 1 for g in gender]).astype(np.int32)
+        except KeyError:
+            self.gender = -1*np.ones(len(self.scale)).astype(np.int32)
+
         # Get gt SMPL parameters, if available
         try:
             self.pose = self.data['pose'].astype(np.float)
             self.betas = self.data['shape'].astype(np.float)
-            self.has_smpl = np.ones(len(self.imgname)).astype(np.int)
-            if dataset == 'mpi-inf-3dhp':
-                self.has_smpl = self.data['has_smpl'].astype(np.int)
-                t = self.has_smpl.mean()
+            self.has_smpl = np.ones(len(self.scale)).astype(np.int)
         except KeyError:
-            self.has_smpl = np.zeros(len(self.imgname)).astype(np.int)
+            self.has_smpl = np.zeros(len(self.scale)).astype(np.int)
 
         # Get gt 3D pose, if available
         try:
-            self.pose_3d = self.data['S']
+            self.pose_3d_smpl = self.data['S_smpl']
             self.has_pose_3d = 1
         except KeyError:
             self.has_pose_3d = 0
-        
+
         # Get 2D keypoints
         try:
-            self.keypoints = self.data['part']
+            self.keypoints_smpl = self.data['part_smpl']
         except KeyError:
-            self.keypoints = np.zeros((len(self.imgname), 24, 3))
+            self.keypoints_smpl = np.zeros((len(self.scale), 24, 3))
 
         self.length = self.scale.shape[0]
+
         self.use_IUV = use_IUV
-        self.has_dp = np.zeros(len(self.imgname))
+        self.has_dp = np.zeros(len(self.scale))
 
-        if self.use_IUV:
-            if self.dataset in ['h36m-train', 'up-3d', 'h36m-test', 'h36m-train-hmr']:
-                self.iuvname = self.data['iuv_names']
-                self.has_dp = self.has_smpl
-                self.uv_type = options.uv_type
-                self.iuv_dir = join(self.img_dir, '{}_IUV_gt'.format(self.uv_type))
-
-        # Using fitted SMPL parameters from SPIN or not
-        if self.is_train and options.use_spin_fit and self.dataset in ['coco', 'lsp-orig', 'mpii', 'lspet', 'mpi-inf-3dhp']:
-            fit_file = cfg.FIT_FILES[is_train][self.dataset]
-            fit_data = np.load(fit_file)
-            self.pose = fit_data['pose'].astype(np.float)
-            self.betas = fit_data['betas'].astype(np.float)
-            self.has_smpl = fit_data['valid_fit'].astype(np.int)
-
-            if self.use_IUV:
-                self.uv_type = options.uv_type
-                self.iuvname = self.data['iuv_names']
-                self.has_dp = self.has_smpl
-                self.fit_joint_error = self.data['fit_errors'].astype(np.float32)
-                self.iuv_dir = join(self.img_dir, '{}_IUV_SPIN_fit'.format(self.uv_type))
+        if self.use_IUV and is_train:
+            self.iuvname = self.data['iuv_names']
+            self.has_dp = self.has_smpl
+            self.uv_type = options.uv_type
+            self.iuv_dir = join(root_dir, '{}_IUV_gt'.format(self.uv_type), 'data/cmu/train')
 
     def augm_params(self):
         """Get augmentation parameters."""
@@ -165,11 +143,11 @@ class BaseDataset(Dataset):
         rgb_img = rgb_img.squeeze(0)
         return rgb_img
 
-    def j2d_processing(self, kp, center, scale, r, f):
+    def smpl_j2d_processing(self, kp, center, scale, r, f):
         """Process gt 2D keypoints and apply all augmentation transforms."""
         nparts = kp.shape[0]
         for i in range(nparts):
-            kp[i,0:2] = transform(kp[i,0:2]+1, center, scale, 
+            kp[i,0:2] = transform(kp[i,0:2]+1, center, scale,
                                   [self.options.img_res, self.options.img_res], rot=r)
         # convert to normalized coordinates
         kp[:,:-1] = 2.*kp[:,:-1]/self.options.img_res - 1.
@@ -179,7 +157,7 @@ class BaseDataset(Dataset):
         kp = kp.astype('float32')
         return kp
 
-    def j3d_processing(self, S, r, f):
+    def smpl_j3d_processing(self, S, r, f):
         """Process gt 3D keypoints and apply all augmentation transforms."""
         # in-plane rotation
         rot_mat = np.eye(3)
@@ -188,10 +166,10 @@ class BaseDataset(Dataset):
             sn,cs = np.sin(rot_rad), np.cos(rot_rad)
             rot_mat[0,:2] = [cs, -sn]
             rot_mat[1,:2] = [sn, cs]
-        S = np.einsum('ij,kj->ki', rot_mat, S) 
+        S = np.einsum('ij,kj->ki', rot_mat, S)
         # flip the x coordinates
         if f:
-             S = flip_kp(S)
+             S = flip_smpl_kp(S)
         S = S.astype('float32')
         return S
 
@@ -248,12 +226,14 @@ class BaseDataset(Dataset):
         # Get augmentation parameters
         flip, pn, rot, sc = self.augm_params()
 
-        # Load image
-        imgname = join(self.img_dir, str(self.imgname[index]))
-        try:
-            img = cv2.imread(imgname)[:,:,::-1].copy().astype(np.float32)
-        except TypeError:
-            print(imgname)
+        # Extract the frame from the video
+        videoname = self.videoname[index]
+        frame = self.framenum[index]
+        cap = cv2.VideoCapture(join(self.video_dir, videoname))
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame)
+        a, img = cap.read()
+        # The image should be mirrored first
+        img = np.fliplr(img)[:, :, ::-1].copy().astype(np.float32)
         orig_shape = np.array(img.shape)[:2]
         item['scale'] = float(sc * scale)
         item['center'] = center.astype(np.float32)
@@ -264,7 +244,7 @@ class BaseDataset(Dataset):
         # Store image before normalization to use it in visualization
         item['img_orig'] = img.clone()
         item['img'] = self.normalize_img(img)
-        item['imgname'] = imgname
+        item['imgname'] = videoname + '_frame_{}'.format('frame')
 
         # Get SMPL parameters, if available
         has_smpl = self.has_smpl[index]
@@ -278,23 +258,24 @@ class BaseDataset(Dataset):
         item['pose'] = torch.from_numpy(self.pose_processing(pose, rot, flip)).float()
         item['betas'] = torch.from_numpy(betas).float()
 
-        # Get 3D pose, if available
+        # Surreal dataset does NOT provide the ground truth of keypoints.
+        # The keypoints of SURREAL is the 24 joints defined by SMPL model.
+        item['keypoints'] = torch.zeros(24, 3, dtype=torch.float32)
+        item['pose_3d'] = torch.zeros(24, 4, dtype=torch.float32)
+
+        # Get 3D and 2D GT SMPL joints (For the compatibility with SURREAL dataset)
         item['has_pose_3d'] = self.has_pose_3d
         if self.has_pose_3d:
-            S = self.pose_3d[index].copy()
-            St = self.j3d_processing(S.copy()[:,:-1], rot, flip)
+            S = self.pose_3d_smpl[index].copy()
+            St = self.smpl_j3d_processing(S.copy()[:,:-1], rot, flip)
             S[:,:-1] = St
-            item['pose_3d'] = torch.from_numpy(S).float()
+            item['pose_3d_smpl'] = torch.from_numpy(S).float()
         else:
-            item['pose_3d'] = torch.zeros(24, 4, dtype=torch.float32)
+            item['pose_3d_smpl'] = torch.zeros(24, 4, dtype=torch.float32)
 
         # Get 2D keypoints and apply augmentation transforms
-        keypoints = self.keypoints[index].copy()
-        item['keypoints'] = torch.from_numpy(self.j2d_processing(keypoints, center, sc*scale, rot, flip)).float()
-
-        # Get GT SMPL joints (For the compatibility with SURREAL dataset)
-        item['keypoints_smpl'] = torch.zeros(24, 3, dtype=torch.float32)
-        item['pose_3d_smpl'] = torch.zeros(24, 4, dtype=torch.float32)
+        keypoints = self.keypoints_smpl[index].copy()
+        item['keypoints_smpl'] = torch.from_numpy(self.smpl_j2d_processing(keypoints, center, sc*scale, rot, flip)).float()
 
         # Pass path to segmentation mask, if available
         # Cannot load the mask because each mask has different size, so they cannot be stacked in one tensor
@@ -334,7 +315,5 @@ class BaseDataset(Dataset):
         return item
 
     def __len__(self):
-        return len(self.imgname)
-
-
+        return len(self.videoname)
 

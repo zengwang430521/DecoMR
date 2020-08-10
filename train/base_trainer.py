@@ -156,8 +156,44 @@ class BaseTrainer(object):
 
         pred_keypoints_3d = pred_keypoints_3d[has_pose_3d == 1]
         if len(gt_keypoints_3d) > 0:
+            # Align the origin of the first 24 keypoints with the pelvis.
             gt_pelvis = (gt_keypoints_3d[:, 2, :] + gt_keypoints_3d[:, 3, :]) / 2
             pred_pelvis = (pred_keypoints_3d[:, 2, :] + pred_keypoints_3d[:, 3, :]) / 2
+            gt_keypoints_3d[:, :24, :] = gt_keypoints_3d[:, :24, :] - gt_pelvis[:, None, :]
+            pred_keypoints_3d[:, :24, :] = pred_keypoints_3d[:, :24, :] - pred_pelvis[:, None, :]
+
+            # Align the origin of the 24 SMPL keypoints with the root joint.
+            gt_root_joint = gt_keypoints_3d[:, 24]
+            pred_root_joint = pred_keypoints_3d[:, 24]
+            gt_keypoints_3d[:, 24:, :] = gt_keypoints_3d[:, 24:, :] - gt_root_joint[:, None, :]
+            pred_keypoints_3d[:, 24:, :] = pred_keypoints_3d[:, 24:, :] - pred_root_joint[:, None, :]
+
+            return (conf * self.criterion_keypoints_3d(pred_keypoints_3d, gt_keypoints_3d)).mean()
+        else:
+            return torch.FloatTensor(1).fill_(0.).to(self.device)
+
+    def smpl_keypoint_3d_loss(self, pred_keypoints_3d, gt_keypoints_3d, has_pose_3d, weight=None):
+        """
+        Compute 3D keypoint loss for the examples that 3D keypoint annotations are available.
+        The loss is weighted by the weight
+        """
+        if gt_keypoints_3d.shape[2] == 3:
+            tmp = gt_keypoints_3d.new_ones(gt_keypoints_3d.shape[0], gt_keypoints_3d.shape[1], 1)
+            gt_keypoints_3d = torch.cat((gt_keypoints_3d, tmp), dim=2)
+
+        conf = gt_keypoints_3d[:, :, -1].unsqueeze(-1).clone()
+        gt_keypoints_3d = gt_keypoints_3d[:, :, :-1].clone()
+        gt_keypoints_3d = gt_keypoints_3d[has_pose_3d == 1]
+        conf = conf[has_pose_3d == 1]
+
+        if weight is not None:
+            weight = weight[has_pose_3d == 1, None, None]
+            conf = conf * weight
+
+        pred_keypoints_3d = pred_keypoints_3d[has_pose_3d == 1]
+        if len(gt_keypoints_3d) > 0:
+            gt_pelvis = gt_keypoints_3d[:, 0, :]
+            pred_pelvis = pred_keypoints_3d[:, 0, :]
             gt_keypoints_3d = gt_keypoints_3d - gt_pelvis[:, None, :]
             pred_keypoints_3d = pred_keypoints_3d - pred_pelvis[:, None, :]
             return (conf * self.criterion_keypoints_3d(pred_keypoints_3d, gt_keypoints_3d)).mean()

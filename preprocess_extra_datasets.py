@@ -7,14 +7,13 @@ import numpy as np
 from utils.renderer import UVRenderer
 from utils import objfile
 
-from datasets.preprocess.h36m import h36m_extract
 from datasets.preprocess import \
-    coco_extract, \
-    lsp_dataset_extract, \
-    lsp_dataset_original_extract, \
-    mpii_extract, \
-    up_3d_extract,\
-    process_dataset
+    process_dataset, process_surreal,\
+    pw3d_extract,\
+    hr_lspet_extract,\
+    mpi_inf_3dhp_extract,\
+    extract_surreal_eval, extract_surreal_train
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -27,30 +26,26 @@ if __name__ == '__main__':
 
     # define path to store extra files
     out_path = cfg.DATASET_NPZ_PATH
-
+    openpose_path = None
     if args.train_files:
-        # UP-3D dataset preprocessing (trainval set)
-        up_3d_extract(cfg.UP_3D_ROOT, out_path, 'trainval')
+        # SURREAL dataset preprocessing (training set)
+        extract_surreal_train(cfg.SURREAL_ROOT, out_path)
 
-        # LSP dataset original preprocessing (training set)
-        lsp_dataset_original_extract(cfg.LSP_ORIGINAL_ROOT, out_path)
+        # MPI-INF-3DHP dataset preprocessing (training set)
+        mpi_inf_3dhp_extract(cfg.MPI_INF_3DHP_ROOT, openpose_path, out_path, 'train', extract_img=True, static_fits=None)
 
-        # MPII dataset preprocessing
-        mpii_extract(cfg.MPII_ROOT, out_path)
-
-        # COCO dataset prepreocessing
-        coco_extract(cfg.COCO_ROOT, out_path)
+        # LSP Extended training set preprocessing - HR version
+        hr_lspet_extract(cfg.LSPET_ROOT, openpose_path, out_path)
 
     if args.eval_files:
+        # SURREAL dataset preprocessing (validation set)
+        extract_surreal_eval(cfg.SURREAL_ROOT, out_path)
 
-        h36m_extract(cfg.H36M_ROOT_ORIGIN, out_path, protocol=1, extract_img=True)
-        h36m_extract(cfg.H36M_ROOT_ORIGIN, out_path, protocol=2, extract_img=False)
+        # 3DPW dataset preprocessing (test set)
+        pw3d_extract(cfg.PW3D_ROOT, out_path)
 
-        # LSP dataset preprocessing (test set)
-        lsp_dataset_extract(cfg.LSP_ROOT, out_path)
-
-        # UP-3D dataset preprocessing (lsp_test set)
-        up_3d_extract(cfg.UP_3D_ROOT, out_path, 'lsp_test')
+        # MPI-INF-3DHP dataset preprocessing (test set)
+        mpi_inf_3dhp_extract(cfg.MPI_INF_3DHP_ROOT, openpose_path, out_path, 'test')
 
     if args.gt_iuv:
         device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -69,5 +64,7 @@ if __name__ == '__main__':
         vt_face = np.array(vt_face) - 1
         renderer = UVRenderer(faces=face, tex=np.zeros([256, 256, 3]), vt=1 - vt, ft=vt_face)
 
-        for dataset_name in ['up-3d', 'h36m-train']:
+        process_surreal(is_train=True, uv_type=uv_type, renderer=renderer)
+
+        for dataset_name in ['lspet', 'coco', 'lsp-orig', 'mpii', 'lspet', 'mpi-inf-3dhp']:
             process_dataset(dataset_name, is_train=True, uv_type=uv_type, smpl=smpl, renderer=renderer)

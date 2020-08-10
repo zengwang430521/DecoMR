@@ -6,6 +6,9 @@ for the datasets and data files necessary to run the code.
 Things you need to change: *_ROOT that indicate the path to each dataset
 """
 from os.path import join
+from os.path import expanduser
+
+
 
 H36M_ROOT = ''
 H36M_ROOT_ORIGIN = ''
@@ -16,6 +19,10 @@ UPI_S1H_ROOT = ''
 MPII_ROOT = ''
 COCO_ROOT = ''
 UP_3D_ROOT = ''
+SURREAL_ROOT = ''
+PW3D_ROOT = ''
+MPI_INF_3DHP_ROOT = ''
+LSPET_ROOT = ''
 
 # Output folder to save test/train npz files
 DATASET_NPZ_PATH = ''
@@ -27,6 +34,9 @@ DATASET_FILES = [ {'h36m-p1': join(DATASET_NPZ_PATH, 'h36m_valid_protocol1.npz')
                    'lsp-orig-test': join(DATASET_NPZ_PATH, 'lsp_dataset_original_test.npz'),
                    'up-3d': join(DATASET_NPZ_PATH, 'up_3d_lsp_test.npz'),
                    'up-3d-test': join(DATASET_NPZ_PATH, 'up_3d_test.npz'),
+                   'surreal': join(DATASET_NPZ_PATH, 'surreal_val.npz'),
+                   '3dpw': join(DATASET_NPZ_PATH, '3dpw_test.npz'),
+                   'mpi-inf-3dhp': join(DATASET_NPZ_PATH, 'mpi_inf_3dhp_valid.npz'),
                    },
 
                   {'h36m-train': join(DATASET_NPZ_PATH, 'h36m_train_new.npz'),
@@ -36,6 +46,7 @@ DATASET_FILES = [ {'h36m-p1': join(DATASET_NPZ_PATH, 'h36m_valid_protocol1.npz')
                    'coco': join(DATASET_NPZ_PATH, 'coco_2014_train.npz'),
                    'lspet': join(DATASET_NPZ_PATH, 'hr-lspet_train.npz'),
                    'mpi-inf-3dhp': join(DATASET_NPZ_PATH, 'mpi_inf_3dhp_train.npz'),
+                   'surreal': join(DATASET_NPZ_PATH, 'surreal_train.npz'),
                    }
                 ]
 
@@ -48,7 +59,6 @@ FIT_FILES = [ {},
                'coco': join(DATASET_NPZ_PATH, 'spin_fits', 'coco.npz'),
                'lspet': join(DATASET_NPZ_PATH, 'spin_fits', 'lspet.npz'),
                'mpi-inf-3dhp': join(DATASET_NPZ_PATH, 'spin_fits', 'mpi_inf_3dhp.npz'),
-
               }
                 ]
 
@@ -64,6 +74,10 @@ DATASET_FOLDERS = {'h36m-train': H36M_ROOT,
                    'up-3d-test': UP_3D_ROOT,
                    'mpii': MPII_ROOT,
                    'coco': COCO_ROOT,
+                   'surreal': SURREAL_ROOT,
+                   '3dpw': PW3D_ROOT,
+                   'lspet': LSPET_ROOT,
+                   'mpi-inf-3dhp': MPI_INF_3DHP_ROOT,
                    }
 
 
@@ -71,7 +85,7 @@ CUBE_PARTS_FILE = 'data/cube_parts.npy'
 JOINT_REGRESSOR_TRAIN_EXTRA = 'data/J_regressor_extra.npy'
 VERTEX_TEXTURE_FILE = 'data/vertex_texture.npy'
 SMPL_FILE = 'data/basicModel_neutral_lbs_10_207_0_v1.0.0.pkl'
-MALE_SMPL_FILE = 'data/basicModel_m_lbs_10_207_0_v1.0.0.pkl'
+MALE_SMPL_FILE = 'data/basicmodel_m_lbs_10_207_0_v1.0.0.pkl'
 FEMALE_SMPL_FILE = 'data/basicModel_f_lbs_10_207_0_v1.0.0.pkl'
 
 JOINT_REGRESSOR_H36M = 'data/J_regressor_h36m.npy'
@@ -112,9 +126,11 @@ JOINTS_IDX = [8, 5, 29, 30, 4, 7, 21, 19, 17, 16, 18, 20, 31, 32, 33, 34, 35, 36
 
 # Joint selectors
 # Indices to get the 14 LSP joints from the 17 H36M joints
-H36M_TO_J14 = [6, 5, 4, 1, 2, 3, 16, 15, 14, 11, 12, 13, 8, 10]
+H36M_TO_J17 = [6, 5, 4, 1, 2, 3, 16, 15, 14, 11, 12, 13, 8, 10, 0, 7, 9]
+H36M_TO_J14 = H36M_TO_J17[:14]
 # Indices to get the 14 LSP joints from the ground truth joints
-J24_TO_J14 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 18]
+J24_TO_J17 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 18, 14, 16, 17]
+J24_TO_J14 = J24_TO_J17[:14]
 
 FOCAL_LENGTH = 5000.
 INPUT_RES = 224

@@ -23,10 +23,10 @@ from models.uv_generator import Index_UV_Generator, cal_uv_weight
 import numpy as np
 import torch.nn.functional as F
 import os
+import utils.config as cfg
 
 
 class Trainer(BaseTrainer):
-
     def init_fn(self):
         # create training dataset
         self.train_ds = create_dataset(self.options.dataset, self.options, use_IUV=True)
@@ -37,6 +37,8 @@ class Trainer(BaseTrainer):
 
         self.LNet = get_LNet(self.options).to(self.device)
         self.smpl = SMPL().to(self.device)
+        self.female_smpl = SMPL(cfg.FEMALE_SMPL_FILE).to(self.device)
+        self.male_smpl = SMPL(cfg.MALE_SMPL_FILE).to(self.device)
 
         uv_res = self.options.uv_res
         self.uv_type = self.options.uv_type
@@ -107,7 +109,7 @@ class Trainer(BaseTrainer):
             else:
                 pred_dp, dp_feature, codes = self.CNet(images)
 
-            if self.options.fit_error_weight:
+            if self.options.adaptive_weight:
                 fit_joint_error = input_batch['fit_joint_error']
                 ada_weight = self.error_adaptive_weight(fit_joint_error).type(dtype)
             else:
@@ -146,35 +148,47 @@ class Trainer(BaseTrainer):
             self.LNet.train()
 
             # Grab data from the batch
-            gt_keypoints_2d = input_batch['keypoints']
-            gt_keypoints_3d = input_batch['pose_3d']
+            # gt_keypoints_2d = input_batch['keypoints']
+            # gt_keypoints_3d = input_batch['pose_3d']
+            gt_keypoints_2d = torch.cat([input_batch['keypoints'], input_batch['keypoints_smpl']], dim=1)
+            gt_keypoints_3d = torch.cat([input_batch['pose_3d'], input_batch['pose_3d_smpl']], dim=1)
             gt_pose = input_batch['pose']
             gt_betas = input_batch['betas']
             has_smpl = input_batch['has_smpl']
             has_dp = input_batch['has_dp']
             has_pose_3d = input_batch['has_pose_3d']
             images = input_batch['img']
+            gender = input_batch['gender']
 
             # images.requires_grad_()
             gt_dp_iuv = input_batch['gt_iuv']
             gt_dp_iuv[:, 1:] = gt_dp_iuv[:, 1:] / 255.0
             batch_size = images.shape[0]
 
+            gt_vertices = images.new_zeros([batch_size, 6890, 3])
             if images.is_cuda and self.options.ngpu > 1:
                 with torch.no_grad():
-                    gt_vertices = data_parallel(self.smpl, (gt_pose, gt_betas), range(self.options.ngpu))
+                    gt_vertices[gender < 0] = data_parallel(
+                        self.smpl, (gt_pose[gender < 0], gt_betas[gender < 0]), range(self.options.ngpu))
+                    gt_vertices[gender == 0] = data_parallel(
+                        self.male_smpl, (gt_pose[gender == 0], gt_betas[gender == 0]), range(self.options.ngpu))
+                    gt_vertices[gender == 1] = data_parallel(
+                        self.female_smpl, (gt_pose[gender == 1], gt_betas[gender == 1]), range(self.options.ngpu))
                     gt_uv_map = data_parallel(self.sampler, gt_vertices, range(self.options.ngpu))
-
                 pred_dp, dp_feature, codes = data_parallel(self.CNet, images, range(self.options.ngpu))
                 pred_uv_map, pred_camera = data_parallel(self.LNet, (pred_dp, dp_feature, codes),
                                                                          range(self.options.ngpu))
             else:
-                gt_vertices = self.smpl(gt_pose, gt_betas)
-                gt_uv_map = self.sampler.get_UV_map(gt_vertices.float())
+                # gt_vertices = self.smpl(gt_pose, gt_betas)
+                with torch.no_grad():
+                    gt_vertices[gender < 0] = self.smpl(gt_pose[gender < 0], gt_betas[gender < 0])
+                    gt_vertices[gender == 0] = self.male_smpl(gt_pose[gender == 0], gt_betas[gender == 0])
+                    gt_vertices[gender == 1] = self.female_smpl(gt_pose[gender == 1], gt_betas[gender == 1])
+                    gt_uv_map = self.sampler.get_UV_map(gt_vertices.float())
                 pred_dp, dp_feature, codes = self.CNet(images)
-                pred_uv_map, pred_camera= self.LNet(pred_dp, dp_feature, codes)
+                pred_uv_map, pred_camera = self.LNet(pred_dp, dp_feature, codes)
 
-            if self.options.fit_error_weight:
+            if self.options.adaptive_weight:
                 fit_joint_error = input_batch['fit_joint_error']
                 ada_weight = self.error_adaptive_weight(fit_joint_error).type(dtype)
             else:
@@ -204,15 +218,17 @@ class Trainer(BaseTrainer):
                 losses['mesh'] = loss_mesh
 
             '''loss on joints'''
-            '''Data without 3D joint but with SMPL parameters (UP-3D), use joints sampled from mesh as GT'''
-            sampled_joints_3d = self.smpl.get_train_joints(sampled_vertices)
-            loss_keypoints_3d_uv = self.keypoint_3d_loss(sampled_joints_3d, gt_keypoints_3d, has_pose_3d)
-            loss_keypoints_3d_uv = loss_keypoints_3d_uv * self.options.lam_key3d
-            losses['key3D'] = loss_keypoints_3d_uv
+            # We add the 24 joints of SMPL model for the training on SURREAL dataset.
+            # sampled_joints_3d = self.smpl.get_train_joints(sampled_vertices)
+            sampled_joints_3d = torch.cat([self.smpl.get_train_joints(sampled_vertices),
+                                           self.smpl.get_smpl_joints(sampled_vertices)], dim=1)
+            loss_keypoints_3d = self.keypoint_3d_loss(sampled_joints_3d, gt_keypoints_3d, has_pose_3d)
+            loss_keypoints_3d = loss_keypoints_3d * self.options.lam_key3d
+            losses['key3D'] = loss_keypoints_3d
 
             sampled_joints_2d = orthographic_projection(sampled_joints_3d, pred_camera)[:, :, :2]
-            loss_keypoints_uv = self.keypoint_loss(sampled_joints_2d, gt_keypoints_2d) * self.options.lam_key2d
-            losses['key2D'] = loss_keypoints_uv
+            loss_keypoints_2d = self.keypoint_loss(sampled_joints_2d, gt_keypoints_2d) * self.options.lam_key2d
+            losses['key2D'] = loss_keypoints_2d
 
             '''consistent loss'''
             if not self.options.lam_con == 0:
@@ -245,6 +261,7 @@ class Trainer(BaseTrainer):
             out_args = {key: losses[key].detach().item() for key in losses.keys()}
             out_args['total'] = loss_total.detach().item()
             self.loss_item = out_args
+
         return out_args
 
     def train_summaries(self, batch, epoch):

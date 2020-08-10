@@ -48,6 +48,10 @@ The model falls under the SMPLify license.
 If you find this model useful for your research, please follow the 
 [corresponding citing insturctions](https://github.com/classner/up/tree/master/3dfit/README.md).
 
+In order to perform the evaluation on 3DPW dataset, you also need to get the 
+[male and female models](http://smpl.is.tue.mpg.de).
+ Please go to the websites for the corresponding projects and register 
+ to get access to the downloads section.
 
 ## Run demo code
 To run our method, you need a bounding box around the person. 
@@ -98,6 +102,9 @@ Running the above command will compute the MPJPE and MPJPE-PA on the Human3.6M d
 2. Human3.6M Protocol 2 ```--dataset=h36m-p2```
 3. UP-3D ```--dataset=up-3d```
 4. LSP ```--dataset=lsp```
+5. 3DPW ```--dataset=3dpw```
+6. MPI-INF-3DHP ```--dataset=mpi-inf-3dhp```
+6. SURREAL ```--dataset=surreal```
 
 ## Run training code
 Due to license limitiations, we cannot provide the SMPL parameters for Human3.6M 

@@ -43,12 +43,12 @@ class TrainOptions(object):
 
         arch.add_argument('--uv_channels', type=int, default=64, help='Number of channels in uv_map')
         arch.add_argument('--warp_level', type=int, default=2, help='The level of the feature warping process.')
-        arch.add_argument('--norm_type', default='BN', choices=['GN', 'BN'],
+        arch.add_argument('--norm_type', default='GN', choices=['GN', 'BN'],
                           help='Normalization layer of the LNet')
 
         train = self.parser.add_argument_group('Training Options')
         train.add_argument('--dataset', default='up-3d',
-                           choices=['itw', 'all', 'h36m', 'up-3d', 'mesh'],
+                           choices=['itw', 'all', 'h36m', 'up-3d', 'mesh', 'spin', 'surreal'],
                            help='Choose training dataset')
 
         train.add_argument('--num_epochs', type=int, default=30, help='Total number of training epochs')
@@ -69,12 +69,8 @@ class TrainOptions(object):
 
         train.add_argument('--use_spin_fit', dest='use_spin_fit', default=False, action='store_true',
                            help='Use the fitting result from spin as GT')
-        train.add_argument('--fit_error_weight', dest='fit_error_weight', default=False, action='store_true',
-                           help='Use different weights according to the fit error.'
-                                'Useful only if use_spin_fit=True')
-
-        train.add_argument('--Adaptive_weight', dest='Adaptive_weight', default=False, action='store_true',
-                           help='Change the loss weight according to the fitting error of SPIN fit result.'
+        train.add_argument('--adaptive_weight', dest='adaptive_weight', default=False, action='store_true',
+                           help='Change the loss weight according to the fitting error of SPIN fit results.'
                                 'Useful only if use_spin_fit = True.')
 
         shuffle_train = train.add_mutually_exclusive_group()
@@ -87,7 +83,7 @@ class TrainOptions(object):
         optim.add_argument("--lr", type=float, default=2.5e-4, help="Learning rate")
         optim.add_argument("--wd", type=float, default=0, help="Weight decay weight")
         optim.add_argument("--lam_tv", type=float, default=1e-4, help='lambda of tv loss')
-        optim.add_argument("--lam_con", type=float, default=0, help='lambda of consistent loss')
+        optim.add_argument("--lam_con", type=float, default=1, help='lambda of consistent loss')
         optim.add_argument("--lam_dp_mask", type=float, default=0.2, help='lambda of densepose mask loss')
         optim.add_argument("--lam_dp_uv", type=float, default=1, help='lambda of densepose uv loss')
         optim.add_argument("--lam_mesh", type=float, default=0, help='lambda of mesh loss')

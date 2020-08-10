@@ -25,6 +25,7 @@ from tqdm import tqdm
 
 import utils.config as cfg
 from datasets.base_dataset import BaseDataset
+from datasets.surreal_dataset import SurrealDataset
 from utils.imutils import uncrop
 from utils.pose_utils import reconstruction_error
 from os.path import join, exists
@@ -53,15 +54,20 @@ parser.add_argument('--ngpu', type=int, default=1)
 def run_evaluation(model, opt, options, dataset_name, log_freq=50):
     """Run evaluation on the datasets and metrics we report in the paper. """
 
+    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     # Create SMPL model
-    smpl = SMPL().cuda()
+    smpl = SMPL().to(device)
+    if dataset_name == '3dpw' or dataset_name == 'surreal':
+        smpl_male = SMPL(cfg.MALE_SMPL_FILE).to(device)
+        smpl_female = SMPL(cfg.FEMALE_SMPL_FILE).to(device)
+
     batch_size = opt.batch_size
 
-    # Regressor for H36m joints
-    J_regressor = torch.from_numpy(np.load(cfg.JOINT_REGRESSOR_H36M)).float()
-
     # Create dataloader for the dataset
-    dataset = BaseDataset(options, dataset_name, use_augmentation=False, is_train=False, use_IUV=False)
+    if dataset_name == 'surreal':
+        dataset = SurrealDataset(options, use_augmentation=False, is_train=False, use_IUV=False)
+    else:
+        dataset = BaseDataset(options, dataset_name, use_augmentation=False, is_train=False, use_IUV=False)
 
     data_loader = DataLoader(dataset,  batch_size=opt.batch_size, shuffle=False, num_workers=int(opt.num_workers),
                              pin_memory=True)
@@ -101,10 +107,11 @@ def run_evaluation(model, opt, options, dataset_name, log_freq=50):
     eval_shape = False
     eval_masks = False
     eval_parts = False
+    joint_mapper = cfg.J24_TO_J17 if dataset_name == 'mpi-inf-3dhp' else cfg.J24_TO_J14
     # Choose appropriate evaluation for each dataset
-    if 'h36m' in dataset_name:
+    if 'h36m' in dataset_name or dataset_name == '3dpw' or dataset_name == 'mpi-inf-3dhp':
         eval_pose = True
-    elif dataset_name == 'up-3d':
+    elif dataset_name in ['up-3d', 'surreal']:
         eval_shape = True
     elif dataset_name == 'lsp':
         eval_masks = True
@@ -116,7 +123,6 @@ def run_evaluation(model, opt, options, dataset_name, log_freq=50):
         renderer = PartRenderer()
 
     # Iterate over the entire dataset
-
     for step, batch in enumerate(tqdm(data_loader, desc='Eval', total=len(data_loader))):
         # Get ground truth annotations from the batch
         gt_pose = batch['pose'].to(device)
@@ -134,20 +140,28 @@ def run_evaluation(model, opt, options, dataset_name, log_freq=50):
         camera = out_dict['camera']
         # 3D pose evaluation
         if eval_pose:
-
             # Get 14 ground truth joints
-            gt_keypoints_3d = batch['pose_3d'].cuda()
-            gt_keypoints_3d = gt_keypoints_3d[:, cfg.J24_TO_J14, :-1]
-            gt_pelvis = (gt_keypoints_3d[:, [2]] + gt_keypoints_3d[:, [3]]) / 2
-            gt_keypoints_3d = gt_keypoints_3d - gt_pelvis
+            if 'h36m' in dataset_name or 'mpi-inf' in dataset_name:
+                gt_keypoints_3d = batch['pose_3d'].cuda()
+                gt_keypoints_3d = gt_keypoints_3d[:, joint_mapper, :-1]
+                gt_pelvis = (gt_keypoints_3d[:, [2]] + gt_keypoints_3d[:, [3]]) / 2
+                gt_keypoints_3d = gt_keypoints_3d - gt_pelvis
+            else:
+                gender = batch['gender'].to(device)
+                gt_vertices = smpl_male(gt_pose, gt_betas)
+                gt_vertices_female = smpl_female(gt_pose, gt_betas)
+                gt_vertices[gender == 1, :, :] = gt_vertices_female[gender == 1, :, :]
+
+                # gt_keypoints_3d = smpl.get_train_joints(gt_vertices)[:, joint_mapper]
+                gt_keypoints_3d = smpl.get_lsp_joints(gt_vertices)
+                gt_pelvis = (gt_keypoints_3d[:, [2]] + gt_keypoints_3d[:, [3]]) / 2
+                gt_keypoints_3d = gt_keypoints_3d - gt_pelvis
 
             # Get 14 predicted joints from the non-parametic mesh
-            # J_regressor_batch = J_regressor[None, :].expand(pred_vertices.shape[0], -1, -1).to(device)
-            # pred_keypoints_3d = torch.matmul(J_regressor_batch, pred_vertices)
-            pred_keypoints_3d = smpl.get_eval_joints(pred_vertices)
+            # pred_keypoints_3d = smpl.get_train_joints(pred_vertices)[:, joint_mapper]
+            pred_keypoints_3d = smpl.get_lsp_joints(pred_vertices)
             pred_pelvis = (pred_keypoints_3d[:, [2]] + pred_keypoints_3d[:, [3]]) / 2
             pred_keypoints_3d = pred_keypoints_3d - pred_pelvis
-
 
             # Absolute error (MPJPE)
             error = torch.sqrt(((pred_keypoints_3d - gt_keypoints_3d) ** 2).sum(dim=-1)).mean(dim=-1).cpu().numpy()
@@ -160,6 +174,12 @@ def run_evaluation(model, opt, options, dataset_name, log_freq=50):
 
         # Shape evaluation (Mean per-vertex error)
         if eval_shape:
+            if dataset_name == 'surreal':
+                gender = batch['gender'].to(device)
+                gt_vertices = smpl_male(gt_pose, gt_betas)
+                gt_vertices_female = smpl_female(gt_pose, gt_betas)
+                gt_vertices[gender == 1, :, :] = gt_vertices_female[gender == 1, :, :]
+
             gt_pelvis_mesh = smpl.get_eval_joints(gt_vertices)
             pred_pelvis_mesh = smpl.get_eval_joints(pred_vertices)
             gt_pelvis_mesh = (gt_pelvis_mesh[:, [2]] + gt_pelvis_mesh[:, [3]]) / 2
