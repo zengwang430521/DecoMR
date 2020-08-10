@@ -48,7 +48,7 @@ The model falls under the SMPLify license.
 If you find this model useful for your research, please follow the 
 [corresponding citing insturctions](https://github.com/classner/up/tree/master/3dfit/README.md).
 
-In order to perform the evaluation on 3DPW dataset, you also need to get the 
+In order to perform the evaluation on 3DPW or SURREAL dataset, you also need to get the 
 [male and female models](http://smpl.is.tue.mpg.de).
  Please go to the websites for the corresponding projects and register 
  to get access to the downloads section.
