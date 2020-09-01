@@ -295,6 +295,7 @@ class BaseDataset(Dataset):
         # Get GT SMPL joints (For the compatibility with SURREAL dataset)
         item['keypoints_smpl'] = torch.zeros(24, 3, dtype=torch.float32)
         item['pose_3d_smpl'] = torch.zeros(24, 4, dtype=torch.float32)
+        item['has_pose_3d_smpl'] = 0
 
         # Pass path to segmentation mask, if available
         # Cannot load the mask because each mask has different size, so they cannot be stacked in one tensor

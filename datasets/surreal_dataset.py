@@ -63,9 +63,9 @@ class SurrealDataset(Dataset):
         # Get gt 3D pose, if available
         try:
             self.pose_3d_smpl = self.data['S_smpl']
-            self.has_pose_3d = 1
+            self.has_pose_3d_smpl = 1
         except KeyError:
-            self.has_pose_3d = 0
+            self.has_pose_3d_smpl = 0
 
         # Get 2D keypoints
         try:
@@ -262,10 +262,11 @@ class SurrealDataset(Dataset):
         # The keypoints of SURREAL is the 24 joints defined by SMPL model.
         item['keypoints'] = torch.zeros(24, 3, dtype=torch.float32)
         item['pose_3d'] = torch.zeros(24, 4, dtype=torch.float32)
+        item['has_pose_3d'] = 0
 
         # Get 3D and 2D GT SMPL joints (For the compatibility with SURREAL dataset)
-        item['has_pose_3d'] = self.has_pose_3d
-        if self.has_pose_3d:
+        item['has_pose_3d_smpl'] = self.has_pose_3d_smpl
+        if self.has_pose_3d_smpl:
             S = self.pose_3d_smpl[index].copy()
             St = self.smpl_j3d_processing(S.copy()[:,:-1], rot, flip)
             S[:,:-1] = St

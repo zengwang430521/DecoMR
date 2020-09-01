@@ -137,6 +137,18 @@ You can view the full list of command line options by running `python train.py -
 The default values are the ones used to train the models in the paper. 
 
 
+## Recent update
+We recently add the training and evaluation code on several datasets:
+[SURREAL](https://www.di.ens.fr/willow/research/surreal/data/),
+[3DPW](https://virtualhumans.mpi-inf.mpg.de/3DPW/) and 
+[MPI-INF-3DHP](http://gvv.mpi-inf.mpg.de/3dhp-dataset/). 
+You can get the preprocess details from [here](datasets/preprocess/README.md).
+
+We add the training code to use the
+ [SPIN fits](http://visiondata.cis.upenn.edu/spin/spin_fits.tar.gz) 
+ as supervision and provide the 
+ [pretrained models](https://drive.google.com/drive/folders/1xWBVfQa7OZ14VgT9BVO9Lj_kDqRAcQ-e?usp=sharing).
+
 
 ## Citing
 If you find this code useful for your research, please consider citing the following paper:
@@ -149,7 +161,8 @@ If you find this code useful for your research, please consider citing the follo
 	}
 
 ## Acknowledgements
-Part of the code is adapted from
+Part of the code and data are adapted from
 ([Graph-CMR](https://github.com/nkolot/GraphCMR), 
-[DenseBody](https://github.com/Lotayou/densebody_pytorch)) .
-We gratefully appreciate the impact it had on our work. 
+[DenseBody](https://github.com/Lotayou/densebody_pytorch),
+[SPIN](https://github.com/nkolot/SPIN)) .
+We gratefully appreciate the impact they had on our work. 

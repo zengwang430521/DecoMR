@@ -150,13 +150,20 @@ class Trainer(BaseTrainer):
             # Grab data from the batch
             # gt_keypoints_2d = input_batch['keypoints']
             # gt_keypoints_3d = input_batch['pose_3d']
-            gt_keypoints_2d = torch.cat([input_batch['keypoints'], input_batch['keypoints_smpl']], dim=1)
-            gt_keypoints_3d = torch.cat([input_batch['pose_3d'], input_batch['pose_3d_smpl']], dim=1)
+            # gt_keypoints_2d = torch.cat([input_batch['keypoints'], input_batch['keypoints_smpl']], dim=1)
+            # gt_keypoints_3d = torch.cat([input_batch['pose_3d'], input_batch['pose_3d_smpl']], dim=1)
+            gt_keypoints_2d = input_batch['keypoints']
+            gt_keypoints_3d = input_batch['pose_3d']
+            has_pose_3d = input_batch['has_pose_3d']
+
+            gt_keypoints_2d_smpl = input_batch['keypoints_smpl']
+            gt_keypoints_3d_smpl = input_batch['pose_3d_smpl']
+            has_pose_3d_smpl = input_batch['has_pose_3d_smpl']
+
             gt_pose = input_batch['pose']
             gt_betas = input_batch['betas']
             has_smpl = input_batch['has_smpl']
             has_dp = input_batch['has_dp']
-            has_pose_3d = input_batch['has_pose_3d']
             images = input_batch['img']
             gender = input_batch['gender']
 
@@ -189,6 +196,9 @@ class Trainer(BaseTrainer):
                 pred_uv_map, pred_camera = self.LNet(pred_dp, dp_feature, codes)
 
             if self.options.adaptive_weight:
+                # Get the confidence of the GT mesh, which is used as the weight of loss item.
+                # The confidence is related to the fitting error and for the data with GT SMPL parameters,
+                # the confidence is 1.0
                 fit_joint_error = input_batch['fit_joint_error']
                 ada_weight = self.error_adaptive_weight(fit_joint_error).type(dtype)
             else:
@@ -202,7 +212,7 @@ class Trainer(BaseTrainer):
             losses['dp_mask'] = loss_dp_mask
             losses['dp_uv'] = loss_dp_uv
 
-            '''loss on uv_map'''
+            '''loss on location map'''
             sampled_vertices = self.sampler.resample(pred_uv_map.float()).type(dtype)
             loss_uv = self.uv_loss(gt_uv_map.float(), pred_uv_map.float(), has_smpl, ada_weight).type(
                 dtype) * self.options.lam_uv
@@ -218,17 +228,53 @@ class Trainer(BaseTrainer):
                 losses['mesh'] = loss_mesh
 
             '''loss on joints'''
-            # We add the 24 joints of SMPL model for the training on SURREAL dataset.
-            # sampled_joints_3d = self.smpl.get_train_joints(sampled_vertices)
-            sampled_joints_3d = torch.cat([self.smpl.get_train_joints(sampled_vertices),
-                                           self.smpl.get_smpl_joints(sampled_vertices)], dim=1)
-            loss_keypoints_3d = self.keypoint_3d_loss(sampled_joints_3d, gt_keypoints_3d, has_pose_3d)
+            weight_key = sampled_vertices.new_ones(batch_size)
+            if self.options.gtkey3d_from_mesh:
+                # For the data without GT 3D keypoints but with SMPL parameters,
+                # we can get the GT 3D keypoints from the mesh.
+                # The confidence of the keypoints is related to the confidence of the mesh.
+                gt_keypoints_3d_mesh = self.smpl.get_train_joints(gt_vertices)
+                gt_keypoints_3d_mesh = torch.cat([gt_keypoints_3d_mesh,
+                                                  gt_keypoints_3d_mesh.new_ones([batch_size, 24, 1])],
+                                                 dim=-1)
+                valid = has_smpl > has_pose_3d
+                gt_keypoints_3d[valid] = gt_keypoints_3d_mesh[valid]
+                has_pose_3d[valid] = 1
+                if ada_weight is not None:
+                    weight_key[valid] = ada_weight[valid]
+
+            sampled_joints_3d = self.smpl.get_train_joints(sampled_vertices)
+            loss_keypoints_3d = self.keypoint_3d_loss(sampled_joints_3d, gt_keypoints_3d, has_pose_3d, weight_key)
             loss_keypoints_3d = loss_keypoints_3d * self.options.lam_key3d
             losses['key3D'] = loss_keypoints_3d
 
             sampled_joints_2d = orthographic_projection(sampled_joints_3d, pred_camera)[:, :, :2]
             loss_keypoints_2d = self.keypoint_loss(sampled_joints_2d, gt_keypoints_2d) * self.options.lam_key2d
             losses['key2D'] = loss_keypoints_2d
+
+            # We add the 24 joints of SMPL model for the training on SURREAL dataset.
+            weight_key_smpl = sampled_vertices.new_ones(batch_size)
+            if self.options.gtkey3d_from_mesh:
+                gt_keypoints_3d_mesh = self.smpl.get_smpl_joints(gt_vertices)
+                gt_keypoints_3d_mesh = torch.cat([gt_keypoints_3d_mesh,
+                                                  gt_keypoints_3d_mesh.new_ones([batch_size, 24, 1])],
+                                                 dim=-1)
+                valid = has_smpl > has_pose_3d_smpl
+                gt_keypoints_3d_smpl[valid] = gt_keypoints_3d_mesh[valid]
+                has_pose_3d_smpl[valid] = 1
+                if ada_weight is not None:
+                    weight_key_smpl[valid] = ada_weight[valid]
+
+            if self.options.use_smpl_joints:
+                sampled_joints_3d_smpl = self.smpl.get_smpl_joints(sampled_vertices)
+                loss_keypoints_3d_smpl = self.smpl_keypoint_3d_loss(sampled_joints_3d_smpl, gt_keypoints_3d_smpl,
+                                                                    has_pose_3d_smpl, weight_key_smpl)
+                loss_keypoints_3d_smpl = loss_keypoints_3d_smpl * self.options.lam_key3d_smpl
+                losses['key3D_smpl'] = loss_keypoints_3d_smpl
+
+                sampled_joints_2d_smpl = orthographic_projection(sampled_joints_3d_smpl, pred_camera)[:, :, :2]
+                loss_keypoints_2d_smpl = self.keypoint_loss(sampled_joints_2d_smpl, gt_keypoints_2d_smpl) * self.options.lam_key2d_smpl
+                losses['key2D_smpl'] = loss_keypoints_2d_smpl
 
             '''consistent loss'''
             if not self.options.lam_con == 0:

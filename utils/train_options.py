@@ -72,6 +72,9 @@ class TrainOptions(object):
         train.add_argument('--adaptive_weight', dest='adaptive_weight', default=False, action='store_true',
                            help='Change the loss weight according to the fitting error of SPIN fit results.'
                                 'Useful only if use_spin_fit = True.')
+        train.add_argument('--gtkey3d_from_mesh', dest='gtkey3d_from_mesh', default=False, action='store_true',
+                           help='For the data without GT 3D keypoints but with fitted SMPL parameters,'
+                                'get the GT 3D keypoints from the mesh.')
 
         shuffle_train = train.add_mutually_exclusive_group()
         shuffle_train.add_argument('--shuffle_train', dest='shuffle_train', action='store_true', help='Shuffle training data')
@@ -90,6 +93,13 @@ class TrainOptions(object):
         optim.add_argument("--lam_uv", type=float, default=1, help='lambda of location map loss')
         optim.add_argument("--lam_key2d", type=float, default=1, help='lambda of 2D joint loss')
         optim.add_argument("--lam_key3d", type=float, default=1, help='lambda of 3D joint loss')
+
+        train.add_argument('--use_smpl_joints', dest='use_smpl_joints', default=False, action='store_true',
+                           help='Use the 24 SMPL joints for supervision, '
+                                'should be set True when using data from SURREAL dataset.')
+        optim.add_argument("--lam_key2d_smpl", type=float, default=1, help='lambda of 2D SMPL joint loss')
+        optim.add_argument("--lam_key3d_smpl", type=float, default=1, help='lambda of 3D SMPL joint loss')
+
         return
 
     def parse_args(self):
