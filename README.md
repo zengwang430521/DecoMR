@@ -137,8 +137,8 @@ You can view the full list of command line options by running `python train.py -
 The default values are the ones used to train the models in the paper. 
 
 
-## Recent update
-We recently add the training and evaluation code on several datasets:
+## Update on Sep 1
+We recently added the training and evaluation code on several datasets:
 [SURREAL](https://www.di.ens.fr/willow/research/surreal/data/),
 [3DPW](https://virtualhumans.mpi-inf.mpg.de/3DPW/) and 
 [MPI-INF-3DHP](http://gvv.mpi-inf.mpg.de/3dhp-dataset/). 
@@ -148,6 +148,21 @@ We add the training code to use the
  [SPIN fits](http://visiondata.cis.upenn.edu/spin/spin_fits.tar.gz) 
  as supervision and provide the 
  [pretrained models](https://drive.google.com/drive/folders/1xWBVfQa7OZ14VgT9BVO9Lj_kDqRAcQ-e?usp=sharing).
+
+
+## Update on Sep 24
+We fixed the bug of the gender label in 
+[SURREAL](https://www.di.ens.fr/willow/research/surreal/data/) dataset, 
+and retrained the model on SURREAL dataset.
+
+If you are using the codes updated on Sep 1, 
+you need to delete the annotation files of SURREAL dataset 
+(`surreal_train.npz` and `surreal_val.npz`) and then 
+run `preprocess_extra_datasets.py` again to get the right gender labels. 
+
+Fortunately, you do NOT need to remove the rendered IUV images of SURREAL dataset, 
+because the rendered IUV images are with right gender labels.
+So the preprocess won't take too much time.
 
 
 ## Citing
