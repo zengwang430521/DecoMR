@@ -63,6 +63,7 @@ def extract_surreal_train(dataset_path, out_path):
                         part24 = info['joints2D'][:, :, ind].transpose(1, 0)
                         joint3d24 = info['joints3D'][:, :, ind].transpose(1, 0)
                         gender = info['gender'][ind, 0]
+                        gender = 'f' if gender == 0 else 'm'    # 0: female; 1: male
                         zrot = info['zrot'][ind, 0]
 
                         # The video of SURREAL is mirrored, and the 2D joints location are consistent with the video.
@@ -178,6 +179,7 @@ def extract_surreal_eval(dataset_path, out_path):
         part24 = info['joints2D'][:, :, ind].transpose(1, 0)
         joint3d24 = info['joints3D'][:, :, ind].transpose(1, 0)
         gender = info['gender'][ind]
+        gender = 'f' if gender == 0 else 'm'  # 0: female; 1: male
         zrot = info['zrot'][ind, 0]
 
         # The video of SURREAL is mirrored, and the 2D joints location are consistent with the video.

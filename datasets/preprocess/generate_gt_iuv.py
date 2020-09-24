@@ -193,7 +193,7 @@ def process_surreal(is_train, uv_type, renderer):
 
             pose_t = torch.from_numpy(pose).float()
             shape_t = torch.from_numpy(shape).float()
-            if gender == 0:
+            if gender == 'f':
                 vertices = smpl_female(pose_t.unsqueeze(0), shape_t.unsqueeze(0))
                 joint3d = smpl_female.get_smpl_joints(vertices)[0]
             else:
