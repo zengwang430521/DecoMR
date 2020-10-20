@@ -152,14 +152,14 @@ def run_evaluation(model, opt, options, dataset_name, log_freq=50):
                 gt_vertices_female = smpl_female(gt_pose, gt_betas)
                 gt_vertices[gender == 1, :, :] = gt_vertices_female[gender == 1, :, :]
 
-                # gt_keypoints_3d = smpl.get_train_joints(gt_vertices)[:, joint_mapper]
-                gt_keypoints_3d = smpl.get_lsp_joints(gt_vertices)
+                gt_keypoints_3d = smpl.get_train_joints(gt_vertices)[:, joint_mapper]
+                # gt_keypoints_3d = smpl.get_lsp_joints(gt_vertices)    # joints_regressor used in cmr
                 gt_pelvis = (gt_keypoints_3d[:, [2]] + gt_keypoints_3d[:, [3]]) / 2
                 gt_keypoints_3d = gt_keypoints_3d - gt_pelvis
 
             # Get 14 predicted joints from the non-parametic mesh
-            # pred_keypoints_3d = smpl.get_train_joints(pred_vertices)[:, joint_mapper]
-            pred_keypoints_3d = smpl.get_lsp_joints(pred_vertices)
+            pred_keypoints_3d = smpl.get_train_joints(pred_vertices)[:, joint_mapper]
+            # pred_keypoints_3d = smpl.get_lsp_joints(pred_vertices)    # joints_regressor used in cmr
             pred_pelvis = (pred_keypoints_3d[:, [2]] + pred_keypoints_3d[:, [3]]) / 2
             pred_keypoints_3d = pred_keypoints_3d - pred_pelvis
 
