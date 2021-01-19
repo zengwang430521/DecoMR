@@ -20,6 +20,8 @@ In order to install OpenDR on Python 3.6, libosmesa6-dev needs to be installed f
 ```
 sudo apt-get install libglu1-mesa-dev freeglut3-dev mesa-common-dev
 sudo apt-get install libosmesa6-dev
+sudo apt-get install gfortran
+pip install --force-reinstall pip==19
 pip install -r requirements.txt
 ```
 
