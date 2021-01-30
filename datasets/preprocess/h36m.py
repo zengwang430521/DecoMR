@@ -75,7 +75,8 @@ def h36m_extract(dataset_path, out_path, protocol=1, extract_img=False):
                             cv2.imwrite(img_out, image)
 
                     # read GT bounding box
-                    mask = bbox_h5py[bbox_h5py['Masks'][frame_i,0]].value.T
+                    #mask = bbox_h5py[bbox_h5py['Masks'][frame_i,0]].value.T
+                    mask = bbox_h5py[bbox_h5py['Masks'][frame_i,0]][:].T
                     ys, xs = np.where(mask==1)
                     bbox = np.array([np.min(xs), np.min(ys), np.max(xs)+1, np.max(ys)+1])
                     center = [(bbox[2]+bbox[0])/2, (bbox[3]+bbox[1])/2]
