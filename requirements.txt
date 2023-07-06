@@ -6,7 +6,7 @@ spacepy==0.2.1
 opendr==0.78
 opencv_python==4.1.2.30
 h5py==2.10.0
-scipy==1.2.1
+scipy==1.10.0
 torchvision==0.3.0
 torch==1.1.0
 ipdb==0.13.3
